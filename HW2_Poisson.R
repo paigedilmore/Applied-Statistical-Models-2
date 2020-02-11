@@ -105,7 +105,69 @@ NMES1988 %>%
 # Data are very clearly overdispersed, resulting in greater significance than reality
 # and a poor model fit.
 
-#f. 
+#f. Fit a negative binomial model vists ~ . .. Comment on significance and quality of fit
+neg_bin_model <- MASS::glm.nb(visits ~ ., NMES1988)
+neg_bin_modelglm <- MASS :: glm.convert(neg_bin_model)
+summary(neg_bin_modelglm, dispersion =1)
+pchisq(neg_bin_modelglm$deviance, neg_bin_modelglm$df.residual,
+       lower.tail = FALSE)
+summary(poisson_model)
+# With the negative binomial model, fewer variables are significant, but their directions all make sense
+# The deviance improved soooo much. The regular Poisson had a deviance of over 23000, and the NB poisson has
+# a deviance just over 5,000 on 4389 DFs. 
 
+#g. Chronic:
+chronic = summary(neg_bin_modelglm)$coefficients[4]
+exp(chronic) # = 1.21 = your # of visits increases by 1.21 with each additional unit increase in Chronic
 
+# h. plot residuals vs fitted values
+nb_preds <- predict(neg_bin_modelglm, type="response")
+residuals(neg_bin_modelglm)
+preds_res <- cbind(nb_preds, residuals(neg_bin_modelglm))
+plot(preds_res, main = "residuals vs predicted values")
+length(nb_preds)
+length(residuals(neg_bin_modelglm))
+preds_res[which(preds_res[,1] <=10),] #COME BACK TO
 
+# i. tabulate the frequencies of counts in visits
+plot(table(NMES1988$visits)) # mostly 0's
+plot(table(round(predict(poisson_model, type="response"))))
+#Poisson shifts the histogram away from 0, when observationally, we see many cases as 0's
+#This makes it a good candidate for a zero inflated poisson model
+
+# j COME BACK TO
+
+#k
+install.packages("pscl")
+library(pscl)
+zip_mod <- zeroinfl(visits ~ ., data=NMES1988)
+summary(zip_mod)
+
+zip_model_small <- zeroinfl(visits ~ health +
+                              chronic +
+                              region+
+                              married +
+                              school +
+                              employed+
+                              insurance+
+                              medicaid | chronic +
+                                age +afam +gender + married + school+
+                                insurance +medicaid, data = NMES1988)
+summary(zip_model_small)
+
+(lrt <- 2*(zip_mod$loglik-zip_model_small$loglik))
+(DegFree <- zip_model_small$df.residual - zip_mod$df.residual)
+pchisq(lrt,DegFree,lower.tail = FALSE) #Appears that the smaller model is different than the larger; shouldn't reduce
+
+Pred_zero <- predict(zip_mod,type="zero") 
+Pred_Count <- predict(zip_mod,type="count") 
+Total_Prob0 <- Pred_zero + (1-Pred_zero)*exp(-Pred_Count)
+mean(Total_Prob0)
+mean(NMES1988$visits == 0)
+mean(dpois(0,predict(poisson_model,type="response")))
+mean(dnbinom(0,mu = predict(neg_bin_model,type="response"), 
+             size = neg_bin_model$theta))
+
+# The zip_model performs almost identically to the observed model when looking at zeros. 
+#The normal Poisson greatly underestimates 0s, and the neg bin underestimates slightly.
+     

@@ -135,7 +135,11 @@ plot(table(round(predict(poisson_model, type="response"))))
 #Poisson shifts the histogram away from 0, when observationally, we see many cases as 0's
 #This makes it a good candidate for a zero inflated poisson model
 
-# j COME BACK TO
+# j Hurdle vs zip
+Hurd_model <- hurdle(visits ~ ., NMES1988)
+summary(Hurd_model)
+# I think that the hurdle model makes sense for this data. Since we're trying to predict visits,
+# I think it adds a nice layer of distinction for the coefficients that lend themselves to having a positive count of visits.
 
 #k
 install.packages("pscl")

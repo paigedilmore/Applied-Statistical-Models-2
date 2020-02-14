@@ -175,3 +175,37 @@ mean(dnbinom(0,mu = predict(neg_bin_model,type="response"),
 # The zip_model performs almost identically to the observed model when looking at zeros. 
 #The normal Poisson greatly underestimates 0s, and the neg bin underestimates slightly.
      
+############################
+############################
+# GLMsData Cancer#
+############################
+############################
+install.packages("GLMsData")
+data(ccancer, package="GLMsData")
+#a. investigate the 0's. Are they random? Remove these observations
+# These observations show structural issues - incorrect matching for M/F to Site of Cancer
+head(ccancer)
+cancer_df <- filter(ccancer, Count != 0)
+
+#b. Create a var that stores the rate of #deaths per 10,000 pop. Plot against each predictor
+death_rate
+
+
+rate <- 10000*(cancer_df$Count/cancer_df$Population)
+plot(cancer_df$Gender, rate) #Median death rate is slightly higher for females, but males have a wider distribution
+plot(cancer_df$Region, rate)
+plot(cancer_df$Site, rate)
+#Clearly, lung cancer has both the highest death rate per 10,000, and the highest IQR. Even on in the 25th percentile, though, the 
+#death rate for lung cancer is significantly higher than the other cancers
+cancer_df$Deaths <- cancer_df$Count
+#c Fit a poisson rate model for # of deaths 
+cancer_df$Count
+rate_model <- glm(Deaths ~ log(Population)+ Gender+Site+Region, family = poisson, data = cancer_df)
+anova(rate_model, test="Chisq")
+summary(rate_model)
+exp(.33)
+# = 1.39 = Cancer occurs at 1.39x higher rate in males than it does in females
+pchisq(summary(rate_model)$deviance, rate_model$df.residual, lower.tail=FALSE)
+# Statistically significantly different from the saturated model. Indicating a somewhat poor fit,
+# despite seeming much better than the Null deviance.
+       

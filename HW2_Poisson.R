@@ -118,16 +118,22 @@ summary(poisson_model)
 
 #g. Chronic:
 chronic = summary(neg_bin_modelglm)$coefficients[4]
-exp(chronic) # = 1.21 = your # of visits increases by 1.21 with each additional unit increase in Chronic
+exp(chronic) # = 1.21 = your # of visits increases by a factor of 1.21 with each additional unit increase in Chronic
 
 # h. plot residuals vs fitted values
 nb_preds <- predict(neg_bin_modelglm, type="response")
+summary(neg_bin_modelglm)
 residuals(neg_bin_modelglm)
 preds_res <- cbind(nb_preds, residuals(neg_bin_modelglm))
 plot(preds_res, main = "residuals vs predicted values")
-length(nb_preds)
+
+values <- cbind(nb_preds, NMES1988$visit)
+plot(values)
 length(residuals(neg_bin_modelglm))
-preds_res[which(preds_res[,1] <=10),] #COME BACK TO
+preds_res[which(preds_res[,1] <=10),] 
+# The lines in the plot represent observations for which we actually observed a zero. 
+# The predictions, are continuous and positive, making the deviance residual negative. 
+# The lowest band represents actual 0's, and each band above represents actual 1's,2's, etc.
 
 # i. tabulate the frequencies of counts in visits
 plot(table(NMES1988$visits)) # mostly 0's
@@ -204,8 +210,58 @@ rate_model <- glm(Deaths ~ log(Population)+ Gender+Site+Region, family = poisson
 anova(rate_model, test="Chisq")
 summary(rate_model)
 exp(.33)
+#d. Gender interpretation
 # = 1.39 = Cancer occurs at 1.39x higher rate in males than it does in females
 pchisq(summary(rate_model)$deviance, rate_model$df.residual, lower.tail=FALSE)
 # Statistically significantly different from the saturated model. Indicating a somewhat poor fit,
 # despite seeming much better than the Null deviance.
-       
+
+
+############################
+############################
+# Kstones#
+############################
+############################
+
+data(kstones, package="GLMsData")
+head(kstones)
+# a. print a 3 way table
+table <- xtabs(Counts ~ Size + Method + Outcome, data= kstones)
+mosaicplot(table, main = "3 way table") 
+# For Small size stones, method B yields more successes
+# For large size stones, method A yeilds more successes. 
+# = relationship between size and method pattern
+
+#b. Fit a partial independence model where size and method interact
+part_dep <- glm(Counts ~ Size*Method + Outcome, family = poisson, kstones)
+#overall fit
+c(deviance(part_dep),df.residual(part_dep))
+# doesn't look very good.
+summary(part_dep)
+
+#c fit conditional independence Outcome and method indep, 
+# given the size of stones
+
+cond_indep <- glm(Counts ~ Size*Method + Outcome*Size, family = poisson, kstones)
+c(deviance(cond_indep), df.residual(cond_indep))
+summary(cond_indep)
+# Much better fit!! 
+
+# d. Fit uniform association model
+uni <- glm(Counts ~ (Method+Size+Outcome)^2, family = poisson, data = kstones)
+anova(uni, test = "Chisq")
+c(deviance(uni), df.residual(uni))
+# best fit
+anova(cond_indep, uni, test="Chisq")
+# There is no statistical difference between the conditional independence model
+# and the uniform association, so we should use conditional independence for increased interpretability.
+
+# e. Interpretting the conditional dependence model
+# Baseline: Size large, method a, outcome failure
+exp(4.3)#= 73, observed was 71
+table
+#Method and Outcome are independent given that we know the Size
+# i.e. The counts for Outcome and Method will change given that you know
+# if the stones were small or large.
+summary(cond_indep)
+

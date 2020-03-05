@@ -67,4 +67,105 @@ exp(nitro$g_upper)
 
 ## Very similar, but the sign switches with the inverse function switch the lower and upper bounds
 
-## Problem B
+## Problem B ## 
+data(gpsleep, package = "GLMsData")
+
+# a. Scatter plot 
+plot(Sleep ~ Dose, data = gpsleep)
+# There seem to be discrete Dose groups
+# Generally, positive linear relationship
+# No 0 values for Dose
+
+# b. histogram of Sleep variable
+hist(gpsleep$Sleep)
+summary(gpsleep$Sleep)
+# Right skewed; Compound Poisson-Gamma. 
+# "Suitable for positive and continuous data with exact zeros"
+
+# c. Computing the proportion of zeros
+vals <- unique(gpsleep$Dose)
+vals
+props <- list()
+
+for (i in vals){
+  tot <- gpsleep[gpsleep$Dose ==i,]%>% tally()
+  tst <- gpsleep[gpsleep$Dose == i,]%>%count(Sleep)
+  if (as.integer(tst[1,1]) == 0)
+  {
+    zeros <- tst[1,2]/tot 
+  } else
+  {
+    zeros <- 0 
+  }
+  props <- c(props, zeros)
+  
+}
+final <- cbind(vals,props)
+final # That was a lot of work lol. 
+# the proportion of "0" sleep decreases as Dose increases. The 0 value
+# for Dose ==2 will cause an issue for Gamma, which needs strictly positive, continuous data.
+
+# d. For records w/ positive sleep only, plot sleep against Dose
+
+plot(Sleep ~ Dose, data = gpsleep[gpsleep$Sleep >0,])
+# Looks like a logarithmic relationship
+
+# e. Attempt the Gamma
+gamma_att <- glm(Sleep ~ Dose, data=gpsleep, 
+                 family=Gamma)
+# per expected:
+# Error: "non-positive values not allowed for the 'gamma' family" 
+
+#f. Add a small constant and experiment
+constant <- runif(5,min=0.001, max=0.1)
+constant # random values
+
+for (i in constant){
+  gpsleep$SleepNew <- gpsleep$Sleep+ i
+  gams <- glm(SleepNew ~ Dose, data = gpsleep,
+              family=Gamma)
+  print(i)
+  print(summary(gams))
+}
+# Coefficients: The coefficients remain nearly the sample for these 5 randomly generated
+# constants added to Sleep. Approx. 0.29 for the intercept, and -0.76 for the Dose.
+# The p value for Dose is stable around 0.016
+
+#Deviance: The deviance shows more variation, going from 2-3x the df, depending on what 
+# constant value is added
+
+#Dispersion: The Dispersion paramter appears relatively stable around 0.75
+
+# When we exp(coef()), it seems like Dose moves in the incorrect direction.
+# According to our plots, an increase in dose should increase sleep.
+# The <1 log odds ratio makes me think it could be interpreted as the odds
+# of being in the zero group decrease as Dose increases... If that's incorrect,
+# then it would seem the adding a constant is just plain bad practice.
+
+# g. Estimate p for use in Tweedie using log link. What does p say about the data?
+install.packages("statmod")
+library(statmod)
+install.packages("tweedie")
+library(tweedie)
+
+TW_p_log <- tweedie.profile(Sleep ~ log(Dose), 
+                            p.vec = seq(from=1,to=5,by=0.05),
+                            link.power = 0, # log link 
+                            data=gpsleep)
+TW_p_log$p.max
+# The output: When the response variable contains exact zeros, all values of p must be between 1 and 2; other values have been removed.
+#1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 
+#...................Done.
+
+# This demonstrates that the Compound Poisson-Gamma model is approriate
+
+# h. Fit a tweedie glm to the data using p
+TW_p_log$p.max
+Tweedie_log <- glm(Sleep ~ log(Dose)
+              , data=gpsleep
+              , family=tweedie(var.power=TW_p_log$p.max
+                                      , link.power=0))
+summary(Tweedie_log)
+# The goodness of fit doesn't seem great, per residual deviance
+exp(log(1.034))
+# Increase in Dose increases Sleep by 1.034.

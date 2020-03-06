@@ -111,6 +111,7 @@ plot(Sleep ~ Dose, data = gpsleep[gpsleep$Sleep >0,])
 # Looks like a logarithmic relationship
 
 # e. Attempt the Gamma
+gpsleep$Dose <- as.factor(gpsleep$Dose)
 gamma_att <- glm(Sleep ~ Dose, data=gpsleep, 
                  family=Gamma)
 # per expected:
@@ -128,31 +129,34 @@ for (i in constant){
   print(summary(gams))
 }
 # Coefficients: The coefficients remain nearly the sample for these 5 randomly generated
-# constants added to Sleep. Approx. 0.29 for the intercept, and -0.76 for the Dose.
-# The p value for Dose is stable around 0.016
+# constants added to Sleep. Approx. 0.65 for the intercept
+# The p value for Doses 2 and 2.75 are routinely significant
 
 #Deviance: The deviance shows more variation, going from 2-3x the df, depending on what 
 # constant value is added
 
-#Dispersion: The Dispersion paramter appears relatively stable around 0.75
-
-# When we exp(coef()), it seems like Dose moves in the incorrect direction.
+#Dispersion: The Dispersion paramter appears relatively stable around 0.88
+exp(coef(gams))
+# When we exp(coef()), it seems like Doses move in the incorrect direction.
 # According to our plots, an increase in dose should increase sleep.
-# The <1 log odds ratio makes me think it could be interpreted as the odds
+# The <1 log odds ratios make me think it could be interpreted as the odds
 # of being in the zero group decrease as Dose increases... If that's incorrect,
 # then it would seem the adding a constant is just plain bad practice.
+# We wipe out the ability to see the probability of having an exact 0
 
 # g. Estimate p for use in Tweedie using log link. What does p say about the data?
 install.packages("statmod")
 library(statmod)
 install.packages("tweedie")
 library(tweedie)
+#gpsleep$Dose <- as.factor(gpsleep$Dose)
 
-TW_p_log <- tweedie.profile(Sleep ~ log(Dose), 
+TW_p_log <- tweedie.profile(Sleep ~ Dose, 
                             p.vec = seq(from=1,to=5,by=0.05),
                             link.power = 0, # log link 
-                            data=gpsleep)
-TW_p_log$p.max
+                            data=gpsleep
+                            , do.plot = TRUE)
+TW_p_log$p.max #1.1051
 # The output: When the response variable contains exact zeros, all values of p must be between 1 and 2; other values have been removed.
 #1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 
 #...................Done.
@@ -161,11 +165,50 @@ TW_p_log$p.max
 
 # h. Fit a tweedie glm to the data using p
 TW_p_log$p.max
-Tweedie_log <- glm(Sleep ~ log(Dose)
+Tweedie_log <- glm(Sleep ~ Dose
               , data=gpsleep
               , family=tweedie(var.power=TW_p_log$p.max
                                       , link.power=0))
 summary(Tweedie_log)
-# The goodness of fit doesn't seem great, per residual deviance
-exp(log(1.034))
-# Increase in Dose increases Sleep by 1.034.
+# The goodness of fit appears moderate
+exp(1.6649)
+
+# i. Predict for each value of Dose. Plot
+vals
+gpsleep$Dose
+doses <- data.frame(Dose = factor(vals))
+mu.doses <- predict(Tweedie_log, newdata =doses, type="response")
+cpg_preds <- cbind(vals,mu.doses)
+plot(Sleep ~ as.numeric(Dose), data = gpsleep)
+plot(mu.doses~as.numeric(vals), data=cpg_preds)
+# Looks like a good fit! But definitely pulls to the outlier (24.8) for Dose 2
+
+#j. Prob of piggies getting no sleep at each level
+p_MLE <- TW_p_log$p.max 
+phi_MLE <- TW_p_log$phi.max
+
+Prob_Zero_Model <- exp(-mu.doses^(2 - p_MLE)/(phi_MLE*(2 - p_MLE)))
+cbind(vals, Prob_Zero_Model) #Values are pretty close to the proportions!
+
+# k. Convert to underlying P-G 
+comp_poi_gam <-tweedie.convert(xi=p_MLE, mu=mu.doses, phi=phi_MLE)
+comp_poi_gam$poisson.lambda
+comp_poi_gam$gamma.mean
+comp_poi_gam$gamma.phi
+# 1.2x more likely to see a 1.04 piggy get some amt of sleep, compared to a .06 piggy
+# Avg sleep for sleepers (gamma.mean), is very similar. This suggests that for
+# those who sleep, the avg time isn't much. The dose has a greater impact of the probability
+# that a given piggy will sleep.
+
+# l. Add quadratic terms 
+TW_p_log2 <- tweedie.profile(Sleep ~ Dose, 
+                            p.vec = seq(from=1,to=3,by=0.05),
+                            link.power = 2, 
+                            data=gpsleep
+                            , do.plot=TRUE)
+Tweedie_log2 <- glm(Sleep ~ Dose
+                   , data=gpsleep
+                   , family=tweedie(var.power=TW_p_log$p.max
+                                    , link.power=2))
+summary(Tweedie_log)
+TW_p_log

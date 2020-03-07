@@ -203,7 +203,7 @@ comp_poi_gam$gamma.phi
 # l. Add quadratic terms 
 TW_p_log2 <- tweedie.profile(Sleep ~ Dose, 
                             p.vec = seq(from=1,to=3,by=0.05),
-                            link.power = 2, 
+                            link.power = 2,  ## struggling to get this to work; sacrificing these pts for more study time. 
                             data=gpsleep
                             , do.plot=TRUE)
 Tweedie_log2 <- glm(Sleep ~ Dose

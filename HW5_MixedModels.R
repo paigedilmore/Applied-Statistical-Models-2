@@ -8,9 +8,8 @@ head(cake)
 
 #a. Fixed and random variables?
 # Recipe = Fixed level
-# Temp = Random
 # replicate = Random
-## RETURN
+# Temp = fixed
 
 # b. 
 cake %>% 
@@ -85,6 +84,7 @@ data <- Problem.2
 data
 data$ID<-as.factor(data$ID)
 set.seed(1)
+size = .95*nrow(data)
 train_ind = sample(seq_len(nrow(data)),size = size)  
 train =data[train_ind,] 
 test=data[-train_ind,] 
@@ -99,39 +99,45 @@ test=data[-train_ind,]
 install.packages("randomForest")
 library(randomForest)
 str(train)
-test[-3]
+head(test[-3])
 rf <- randomForest(y ~ ., data=train)
 preds <- predict(rf, newdata=test[-3])
 resids <- (test[3]-preds)^2
 res<- cbind(test[3],preds,((test[3]-preds)^2))
-sum(res[3])/nrow(res) #MSE = 10.10093
+sum(res[3])/nrow(res) #MSE = 8.912
 
 #c. Fit mixed model
 library(lmerTest)
 data
-mix_mod <- lmer(y ~ 1 + (1 | ID), data = data)
+mix_mod <- lmer(y ~ 1 + (1 | ID), data = train)
 summary(mix_mod)
 blups <- ranef(mix_mod)
-blups$ID
+blups$ID + 1.77 #represents the shift to the overall intercept induced by each grouping/ID
 library(dplyr)
-mus <- cbind(as.data.frame(data %>% group_by(ID) %>% summarise(mean_y = mean(y))),blups$ID)
-colnames<- c("ID","mean_y","blup")
-names(mus)<- colnames
-mus$sum <- mus$mean_y+mus$blup
-mus ## DF with stored blups and overall intercepts 
-# mus$sum represents the mu for y, adjusted for each group/ID factor
-mus<- mus[c(1,4)]
-
+blup_id <- as.data.frame(cbind(seq(1,50,1), blups$ID+1.77))
+ ## DF with stored blups and overall intercepts 
+colnames <-c('ID', 'BLUP')
+names(blup_id) <- colnames
+blup_id$ID <- as.factor(blup_id$ID)
 # d. Joining blups to the test dataset
-test<-left_join(test, mus)
+test<-left_join(test, blup_id)
 head(test)
 
 # e. Store residuals
-mix_mod_res <- data.frame(residuals(mix_mod))
-mix_mod_res <- mix_mod_res[train_ind,]
+mix_mod_res <- residuals(mix_mod)
+
 train$resids <- mix_mod_res
-# f. 
-rf2 <- randomForest(resids ~ x, data= train)
-predictions_res <- predict(rf2, newdata = test[-3])
-plot(predictions_res, test$sum)
+head(train)
 head(test)
+
+# f. 
+rf2 <- randomForest(resids ~ x, data= train) #How much of residual value is explained by adding in x? How much error is reduced?
+predictions_res <- predict(rf2, newdata = test[-3]) # These predictions represent what was possible to explain leaning only on the x variable
+
+# g. add predictions to blups in part d
+final_preds<- test$BLUP + predictions_res
+sum(((final_preds-test$y)^2))/nrow(test)
+
+#8.361255 = Lower MSE than random forest alone, indicating that even for random forest, 
+# taking random effects into account can reduce the MSE/fit the model better. 
+# Highlights the value of utilizing random effects

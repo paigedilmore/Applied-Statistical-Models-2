@@ -15,7 +15,7 @@ ggplot(BodyWeight, aes(x=Time, y=weight)) +
 #Base model + plot
 library(lme4)
 panel <- lmer(weight ~ Diet + (1| Rat), data=BodyWeight)
-summary(panel) #Rat accounts for a lot of St. Dev.
+summary(panel) #Rat accounts for a lot of variation
 
 #Random intercepts
 panel_2 <- lme4::fortify.merMod(panel)
@@ -56,5 +56,52 @@ BodyWeight%>%
 # C) Mixed Model:
 mixedmod <- lmer(weight ~ Time + (1 | Rat), BodyWeight)
 summary(mixedmod)
-# The FE estimate for the intercept, in the context of the variance component for rat, suggests that
+# The FE estimate for the intercept, in the context of the variance component for rat, 
 # appears to be simply placed in the middle of the two(ish) classes discussed above. Then the Rat var component moves it up and down.
+
+# D) Obtain the BLUPs for rates and list who is most heavy
+max(ranef(mixedmod)$Rat)
+summary(mixedmod)$coefficients[1,1] + max(ranef(mixedmod)$Rat) # = 570; Rat 12
+
+BodyWeight%>%
+  subset(Rat==12)%>%
+  summarize(mean(weight))
+
+# E) Fit mixed effect with random slope, also
+mixedmod_m <- lmer(weight ~ Time + (Time | Rat), BodyWeight,
+                   control=lmerControl(optimizer="Nelder_Mead"))
+summary(mixedmod_m)
+confint(mixedmod_m, method="boot", oldNames=FALSE)
+
+#Do slopes and intercepts seem to vary between subjects?
+
+#F) BLUPS from E
+min((ranef(mixedmod_m)$Rat)[,2]) #Rat 7
+max((ranef(mixedmod_m)$Rat)[,2]) #Rat10
+#Rat 7 = .21
+summary(mixedmod_m)$coefficients[2] + min((ranef(mixedmod_m)$Rat)[,2])
+#Rat 10 = 1.30
+summary(mixedmod_m)$coefficients[2] + max((ranef(mixedmod_m)$Rat)[,2])
+
+BodyWeight%>%
+  subset((Rat==7) | (Rat ==10))%>%
+          group_by(Rat)%>%
+  summarize(minw = min(weight),meanw = mean(weight), maxw = max(weight),
+            rangew = max(weight)-min(weight),
+            pct_chg = (max(weight)-min(weight))/min(weight))
+# The percent change for Rat 10 was more than 2x the percent change for Rat 7
+
+#G) adding diet as interaction with time. Does diet effect weight? Does it effect differently at different times?
+
+mixedmod_diet <- summary(lmerTest::lmer(weight ~ Time*Diet + (Time | Rat), BodyWeight,
+                   control=lmerControl(optimizer="Nelder_Mead")))
+
+summary(lmerTest::lmer(weight ~ Time*Diet + (Time | Rat), BodyWeight,
+                       control=lmerControl(optimizer="Nelder_Mead"))) $coefficients   
+# Diet does effect weight, with 2 and 3 being significantly different than diet 1
+# Diet 2's slope gets significantly steeper over time.
+diet2= BodyWeight%>%
+  subset(Diet==2)
+         
+ggplot(diet2, aes(x=Time, y=weight)) +
+  geom_point() + facet_wrap(~Rat) + scale_y_log10()
